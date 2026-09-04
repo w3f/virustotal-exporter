@@ -51,7 +51,15 @@ bash deployment/rule-tests/run.sh
 ## Releasing
 
 Every push to `main` builds the image as `web3f/virustotal-exporter:<sha>`, promotes it to `main`
-and `latest`, and publishes the chart to `https://w3f.github.io/helm-charts/` if its version is
-new. To release, bump `version` and `appVersion` in `deployment/chart/Chart.yaml` and the version
-in `package.json`, merge, then push a tag `vX.Y.Z` on that commit: the tested image is retagged
-with the version and a GitHub Release is created.
+and `latest`, and publishes the chart to `https://w3f.github.io/helm-charts/` if its `version` is
+new. The chart deploys the image tag named by its `appVersion`, and that tag only exists once the
+matching release has been made.
+
+To release `vX.Y.Z`:
+
+1. Set `version` in `package.json`, and `version` and `appVersion: vX.Y.Z` in
+   `deployment/chart/Chart.yaml`. Merge to `main`.
+2. Push the tag `vX.Y.Z` on the merged commit. The image already tested on `main` is retagged
+   `vX.Y.Z` and a GitHub Release is created.
+
+A chart-only change bumps `version` alone and needs no tag.

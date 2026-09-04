@@ -2,5 +2,5 @@ apiVersion: v2
 name: virustotal-exporter
 description: Prometheus exporter for the VirusTotal reputation of a set of domains
 type: application
-version: 1.0.0
-appVersion: "1.0.0"
+version: 1.0.1
+appVersion: "v1.0.0"
