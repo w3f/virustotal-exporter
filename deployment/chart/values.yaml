@@ -1,6 +1,6 @@
 image:
   repository: web3f/virustotal-exporter
-  tag: ""                      # empty → .Chart.AppVersion
+  tag: latest                  # pin a release tag in real deployments
   pullPolicy: IfNotPresent
 
 intervalMinutes: 480           # → INTERVAL_MINUTES

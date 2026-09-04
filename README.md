@@ -1,13 +1,33 @@
+[![CI](https://github.com/w3f/virustotal-exporter/actions/workflows/ci.yml/badge.svg)](https://github.com/w3f/virustotal-exporter/actions/workflows/ci.yml)
+
 # virustotal-exporter
 
-Watches a set of internet domains for adverse security reputation and publishes what it finds as
-Prometheus metrics. Every sweep it asks VirusTotal how many security vendors flag each domain as
-malicious or suspicious; the Helm chart ships alerting rules that turn a non-zero count, or a
-domain whose lookups keep failing, into an alert.
+virustotal-exporter watches a set of internet domains for adverse security reputation and publishes what it finds as Prometheus metrics. Every sweep it asks VirusTotal how many security vendors flag each domain as malicious or suspicious; the Helm chart ships alerting rules that turn a non-zero count, or a domain whose lookups keep failing, into an alert.
 
-The watched set is the union of every DNS zone visible to a Cloudflare API token and a configured
-list, rebuilt at the start of every sweep. Lookups are issued one at a time, 15 seconds apart, to
-stay within VirusTotal's public rate limit.
+## Quick Start
+
+**Prerequisites:** Node.js 22+
+
+```bash
+git clone https://github.com/w3f/virustotal-exporter.git
+cd virustotal-exporter
+npm ci
+VIRUSTOTAL_API_KEY=... DOMAINS=example.com npm run dev
+```
+
+Metrics are served at `http://localhost:3000/metrics`.
+
+## How It Works
+
+```mermaid
+flowchart LR
+    CF[Cloudflare zones] --> E
+    D[DOMAINS] --> E
+    E[virustotal-exporter] <-->|domain reports| VT[VirusTotal]
+    E -->|/metrics| P[Prometheus] --> A[Alerts]
+```
+
+The watched set is the union of every zone visible to the Cloudflare token and the `DOMAINS` list, rebuilt at the start of every sweep. Domains are looked up one at a time, 15 seconds apart, every `INTERVAL_MINUTES`; sweeps never overlap. A failed lookup publishes nothing for that domain in that sweep; a domain VirusTotal has never analysed publishes `0`.
 
 ## Metrics
 
@@ -16,11 +36,11 @@ stay within VirusTotal's public rate limit.
 | `virustotal_reports`                        | `domain` | vendors flagging the domain as malicious or suspicious |
 | `virustotal_last_success_timestamp_seconds` | `domain` | Unix time of the last successful lookup                |
 
-Served on port 3000 at `/metrics`, together with the default Node.js process metrics. `/health`
-answers 200 while the process is serving. A failed lookup publishes nothing for that domain in
-that sweep; a domain VirusTotal has never analysed publishes `0`.
+Served on port 3000 together with the default Node.js process metrics. `/health` answers 200 while the process is serving.
 
 ## Configuration
+
+Environment variables only; logs are JSON lines on stdout.
 
 | Variable               | Required | Default | Meaning                                               |
 | ---------------------- | -------- | ------- | ----------------------------------------------------- |
@@ -30,36 +50,8 @@ that sweep; a domain VirusTotal has never analysed publishes `0`.
 | `INTERVAL_MINUTES`     | no       | `480`   | minutes between sweep starts                          |
 | `LOG_LEVEL`            | no       | `info`  | `debug`, `info`, `warn` or `error`                    |
 
-Logs are JSON lines on stdout.
+See the [deployment guide](deployment/README.md) for the Docker image, the Helm chart and CI.
 
-## Development
+## Contributing
 
-```
-npm ci
-npm run dev        # runs from source with tsx
-npm test           # unit tests (node:test)
-npm run lint
-npm run build      # compiles to dist/
-```
-
-The chart lives in `deployment/chart`. Its alerting rules are unit-tested with promtool:
-
-```
-bash deployment/rule-tests/run.sh
-```
-
-## Releasing
-
-Every push to `main` builds the image as `web3f/virustotal-exporter:<sha>`, promotes it to `main`
-and `latest`, and publishes the chart to `https://w3f.github.io/helm-charts/` if its `version` is
-new. The chart deploys the image tag named by its `appVersion`, and that tag only exists once the
-matching release has been made.
-
-To release `vX.Y.Z`:
-
-1. Set `version` in `package.json`, and `version` and `appVersion: vX.Y.Z` in
-   `deployment/chart/Chart.yaml`. Merge to `main`.
-2. Push the tag `vX.Y.Z` on the merged commit. The image already tested on `main` is retagged
-   `vX.Y.Z` and a GitHub Release is created.
-
-A chart-only change bumps `version` alone and needs no tag.
+virustotal-exporter is built and maintained by the Web3 Foundation SecOps team for our own monitoring needs. See [CONTRIBUTING.md](CONTRIBUTING.md) for what that means for issues and pull requests, and [SECURITY.md](SECURITY.md) for reporting vulnerabilities privately.
