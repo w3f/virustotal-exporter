@@ -1,0 +1,121 @@
+# Pull requests run the gates. main pushes the image as :<sha>, then promotes it to :main and
+# :latest and publishes the chart. A vX.Y.Z tag retags the already-tested :<sha> image.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: web3f/virustotal-exporter
+  PROMETHEUS_VERSION: 3.14.0
+
+jobs:
+  code:
+    name: Build, lint, test
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+
+  chart:
+    name: Chart lint, render, rule tests
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
+        with:
+          version: v3.17.3
+      - name: Install promtool
+        run: |
+          curl -sSL "https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz" \
+            | tar xz --strip-components=1 "prometheus-${PROMETHEUS_VERSION}.linux-amd64/promtool"
+          sudo install promtool /usr/local/bin/promtool
+      - run: helm lint deployment/chart --set secrets.virustotalApiKey=placeholder
+      - run: helm template virustotal-exporter deployment/chart --set secrets.virustotalApiKey=placeholder
+      - run: deployment/rule-tests/run.sh
+
+  docker-build:
+    name: Docker build and push
+    if: ${{ github.ref == 'refs/heads/main' }}
+    needs: [code, chart]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  promote-main-image:
+    name: Promote main image
+    if: ${{ github.ref == 'refs/heads/main' }}
+    needs: [docker-build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - run: docker buildx imagetools create -t "${IMAGE}:main" -t "${IMAGE}:latest" "${IMAGE}:${GITHUB_SHA}"
+
+  publish-chart:
+    name: Publish Helm chart
+    if: ${{ github.ref == 'refs/heads/main' }}
+    needs: [docker-build]
+    uses: w3f/helm-charts/.github/workflows/publish-chart.yml@master
+    with:
+      chart-path: deployment/chart
+    secrets:
+      HELM_CHARTS_TOKEN: ${{ secrets.HELM_CHARTS_TOKEN }}
+
+  release-tag:
+    name: Release tag
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Verify the tested image exists
+        run: docker manifest inspect "${IMAGE}:${GITHUB_SHA}"
+      - name: Retag it with the release version
+        run: docker buildx imagetools create -t "${IMAGE}:${GITHUB_REF_NAME}" "${IMAGE}:${GITHUB_SHA}"
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" --verify-tag --generate-notes

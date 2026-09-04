@@ -1,0 +1,75 @@
+rule_files:
+  - rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+  # A flagged domain alerts after 2m; a clean one and a domain that VirusTotal has never analysed stay quiet.
+  - interval: 1m
+    input_series:
+      - series: 'virustotal_reports{domain="bad.org", instance="10.0.0.1:3000", pod="vt-1", job="vt"}'
+        values: '0 0 3 3 3 3 3 3 3 3'
+      - series: 'virustotal_reports{domain="clean.org", instance="10.0.0.1:3000", pod="vt-1", job="vt"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: VirustotalDomainFlagged
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: VirustotalDomainFlagged
+        exp_alerts:
+          - &flagged
+            exp_labels: { severity: warning, domain: bad.org, job: vt }
+            exp_annotations:
+              summary: Domain bad.org is flagged on VirusTotal
+              description: '3 security vendors flag bad.org as malicious or suspicious: https://www.virustotal.com/gui/domain/bad.org'
+
+  # A scrape gap and a pod restart do not clear a firing alert.
+  - interval: 1m
+    input_series:
+      - series: 'virustotal_reports{domain="bad.org", instance="10.0.0.1:3000", pod="vt-1", job="vt"}'
+        values: '3 3 3 3 _ _ _ 3 _ _ _ _ _ _ _'
+      - series: 'virustotal_reports{domain="bad.org", instance="10.0.0.2:3000", pod="vt-2", job="vt"}'
+        values: '_ _ _ _ _ _ _ _ _ _ 3 3 3 3 3'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: VirustotalDomainFlagged
+        exp_alerts:
+          - *flagged
+      - eval_time: 14m
+        alertname: VirustotalDomainFlagged
+        exp_alerts:
+          - *flagged
+
+  # Freshness: a domain whose last success stops advancing goes stale after 3 × 480m, then 30m.
+  - interval: 1m
+    input_series:
+      - series: 'virustotal_last_success_timestamp_seconds{domain="fresh.org", instance="10.0.0.1:3000", pod="vt-1", job="vt"}'
+        values: '0+60x1500'
+      - series: 'virustotal_last_success_timestamp_seconds{domain="stale.org", instance="10.0.0.1:3000", pod="vt-1", job="vt"}'
+        values: '0x1500'
+    alert_rule_test:
+      - eval_time: 24h10m
+        alertname: VirustotalLookupStale
+        exp_alerts: []
+      - eval_time: 24h31m
+        alertname: VirustotalLookupStale
+        exp_alerts:
+          - exp_labels: { severity: warning, domain: stale.org, job: vt }
+            exp_annotations:
+              summary: VirusTotal lookups for stale.org are stale
+              description: 'No successful VirusTotal lookup for stale.org for 1d 0h 31m 0s; its reputation count can no longer be trusted'
+
+  # A scrape gap does not reset a pending stale alert.
+  - interval: 1m
+    input_series:
+      - series: 'virustotal_last_success_timestamp_seconds{domain="stale.org", instance="10.0.0.1:3000", pod="vt-1", job="vt"}'
+        values: '0x1450 _x20 0x30'
+    alert_rule_test:
+      - eval_time: 24h35m
+        alertname: VirustotalLookupStale
+        exp_alerts:
+          - exp_labels: { severity: warning, domain: stale.org, job: vt }
+            exp_annotations:
+              summary: VirusTotal lookups for stale.org are stale
+              description: 'No successful VirusTotal lookup for stale.org for 1d 0h 35m 0s; its reputation count can no longer be trusted'

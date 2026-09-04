@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "virustotal-exporter.fullname" . }}
+  labels:
+    {{- include "virustotal-exporter.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      {{- include "virustotal-exporter.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "virustotal-exporter.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: exporter
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: INTERVAL_MINUTES
+              value: {{ .Values.intervalMinutes | quote }}
+            - name: DOMAINS
+              value: {{ join "," .Values.domains | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.logLevel | quote }}
+          envFrom:
+            - secretRef:
+                name: {{ include "virustotal-exporter.fullname" . }}
+          ports:
+            - name: metrics
+              containerPort: 3000
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

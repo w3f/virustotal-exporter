@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "virustotal-exporter.fullname" . }}
+  labels:
+    {{- include "virustotal-exporter.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "virustotal-exporter.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: metrics
+      port: 3000
+      targetPort: metrics

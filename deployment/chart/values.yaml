@@ -1,0 +1,22 @@
+image:
+  repository: web3f/virustotal-exporter
+  tag: ""                      # empty → .Chart.AppVersion
+  pullPolicy: IfNotPresent
+
+intervalMinutes: 480           # → INTERVAL_MINUTES
+domains: []                    # → DOMAINS, comma-joined
+logLevel: info                 # → LOG_LEVEL
+
+secrets:
+  virustotalApiKey: ""         # → VIRUSTOTAL_API_KEY, required
+  cloudflareApiToken: ""       # → CLOUDFLARE_API_TOKEN; empty means no zone enumeration
+
+resources:
+  requests: { cpu: 50m, memory: 128Mi }
+  limits:   { cpu: 200m, memory: 256Mi }
+
+serviceMonitor:
+  enabled: true
+
+prometheusRule:
+  enabled: true
