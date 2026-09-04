@@ -7,7 +7,7 @@ updates:
     labels: [dependencies, security]
     groups:
       actions:
-        patterns: ["*"]
+        patterns: ['*']
 
   - package-ecosystem: npm
     directory: /
@@ -20,4 +20,4 @@ updates:
     groups:
       security-updates:
         applies-to: security-updates
-        patterns: ["*"]
+        patterns: ['*']

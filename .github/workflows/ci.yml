@@ -53,7 +53,7 @@ jobs:
           sudo install promtool /usr/local/bin/promtool
       - run: helm lint deployment/chart --set secrets.virustotalApiKey=placeholder
       - run: helm template virustotal-exporter deployment/chart --set secrets.virustotalApiKey=placeholder
-      - run: deployment/rule-tests/run.sh
+      - run: bash deployment/rule-tests/run.sh
 
   docker-build:
     name: Docker build and push

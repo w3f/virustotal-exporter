@@ -45,7 +45,7 @@ npm run build      # compiles to dist/
 The chart lives in `deployment/chart`. Its alerting rules are unit-tested with promtool:
 
 ```
-deployment/rule-tests/run.sh
+bash deployment/rule-tests/run.sh
 ```
 
 ## Releasing
