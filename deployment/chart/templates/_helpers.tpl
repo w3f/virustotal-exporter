@@ -14,6 +14,5 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "virustotal-exporter.labels" -}}
 helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version }}
 {{ include "virustotal-exporter.selectorLabels" . }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
